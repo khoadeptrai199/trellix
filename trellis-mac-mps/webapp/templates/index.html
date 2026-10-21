@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TRELLIS (Apple Silicon) &mdash; local 3D generator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>TRELLIS <span class="badge">Apple Silicon port</span></h1>
+    <p class="tagline">Image &rarr; 3D asset, generated locally on your Mac's GPU via Metal. No CUDA.</p>
+    <details class="whats-new">
+      <summary>What's new in this port</summary>
+      <ul>
+        <li>Every CUDA-only piece of the original <a href="https://trellis3d.github.io/" target="_blank" rel="noopener">TRELLIS</a> pipeline replaced with pure-PyTorch/MPS or hand-written Metal equivalents &mdash; runs natively on Apple Silicon, no CUDA/Linux required.</li>
+        <li>A tile-binned Metal rasterizer (bins triangles into screen-space tiles before rasterizing, the same technique nvdiffrast's own CUDA rasterizer uses) &mdash; <strong>14&ndash;30x faster</strong> hole-filling and mesh rendering than a naive brute-force Metal kernel at real mesh scale.</li>
+        <li>Fixed a silent mesh-decimation bug (<code>vtkQuadricDecimation</code> would no-op on certain non-manifold meshes) that was letting undecimated, multi-hundred-thousand-face meshes slip through the rest of postprocessing.</li>
+        <li>This web UI and the <code>cli.py</code> command-line tool, both driving the same verified pipeline.</li>
+      </ul>
+      <p>Full writeup: <a href="/APPLE_SILICON.md" target="_blank" rel="noopener">APPLE_SILICON.md</a></p>
+    </details>
+  </header>
+
+  <main>
+    <section id="generate-panel" class="panel">
+      <h2>Generate</h2>
+
+      <div class="upload-row">
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept="image/png,image/jpeg" hidden>
+          <span id="dropzone-label">Drop an image here, or click to choose one</span>
+          <img id="preview-img" hidden>
+        </label>
+
+        <div class="examples">
+          <div class="examples-label">...or pick an example</div>
+          <div id="examples-grid" class="examples-grid"></div>
+        </div>
+      </div>
+
+      <details class="settings">
+        <summary>Advanced settings</summary>
+        <div class="settings-grid">
+          <label class="checkbox-label"><input type="checkbox" id="opt-mesh-only" checked> Mesh only (recommended for 24 GB Macs; untextured GLB for STL conversion)</label>
+          <label>Seed <input type="number" id="opt-seed" value="1"></label>
+          <label>Mesh simplify ratio <input type="number" id="opt-simplify" value="0.95" step="0.01" min="0" max="0.99"></label>
+          <label>Texture size <input type="number" id="opt-texture-size" value="1024" step="256"></label>
+          <label>Hole-fill resolution <input type="number" id="opt-fill-res" value="1024" step="128"></label>
+          <label>Hole-fill views <input type="number" id="opt-fill-views" value="1000" step="100"></label>
+          <label>Multi-view count <input type="number" id="opt-mv-views" value="100" step="10"></label>
+          <label class="checkbox-label"><input type="checkbox" id="opt-skip-previews"> Skip preview videos (faster)</label>
+          <label class="checkbox-label"><input type="checkbox" id="opt-radiance-field"> Include octree/radiance-field preview (opt-in, ~18s/frame &mdash; slower than mesh/gaussian previews)</label>
+        </div>
+      </details>
+
+      <button id="generate-btn" disabled>Generate 3D asset</button>
+
+      <div id="progress-panel" hidden>
+        <div class="progress-stage" id="progress-stage">Starting&hellip;</div>
+        <div class="progress-bar"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+        <div class="progress-detail" id="progress-detail"></div>
+        <div class="progress-elapsed" id="progress-elapsed"></div>
+      </div>
+    </section>
+
+    <section id="viewer-panel" class="panel">
+      <h2>Result</h2>
+      <div id="viewer-container"><canvas id="viewer-canvas"></canvas></div>
+      <div id="viewer-empty" class="viewer-empty">Generate an asset to see it here.</div>
+      <div id="download-row" class="download-row" hidden>
+        <a id="dl-glb" download>Download .glb</a>
+        <a id="dl-ply" download>Download .ply (Gaussian splat)</a>
+      </div>
+    </section>
+  </main>
+
+  <section id="live-preview-panel" class="panel" hidden>
+    <h2>Live preview</h2>
+    <p class="live-preview-hint">These fill in as generation progresses &mdash; no need to wait for the final download to see how it's looking.</p>
+    <div class="live-preview-grid">
+      <div class="live-preview-item" id="live-gs-item" hidden>
+        <div class="live-preview-label">Gaussian preview</div>
+        <img id="live-gs-gif" alt="Gaussian splat preview animation">
+      </div>
+      <div class="live-preview-item" id="live-mesh-item" hidden>
+        <div class="live-preview-label">Mesh preview</div>
+        <img id="live-mesh-gif" alt="Mesh normal preview animation">
+      </div>
+      <div class="live-preview-item" id="live-rf-item" hidden>
+        <div class="live-preview-label">Octree preview</div>
+        <img id="live-rf-gif" alt="Radiance-field (octree) preview animation">
+      </div>
+      <div class="live-preview-item live-preview-multiview" id="live-mv-item" hidden>
+        <div class="live-preview-label">Multi-view render <span id="live-mv-counter" class="live-mv-counter"></span></div>
+        <img id="live-mv-img" alt="Current multi-view render frame, updates as rendering progresses">
+      </div>
+    </div>
+  </section>
+
+  <section id="history-panel" class="panel">
+    <h2>History</h2>
+    <div id="history-list" class="history-list"></div>
+  </section>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="{{ url_for('static', filename='js/viewer.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+# ============================================================
+# Hunyuan3D 2.1 — dependencies for macOS (Apple Silicon, MPS)
+#
+# torch / torchvision are NOT listed here: install.sh installs them first from
+# the default index, because the MPS build is the plain PyPI wheel and the rest
+# of this file must resolve against whatever torch that lands.
+#
+# This file covers BOTH pipelines. Texturing on Mac used to be listed as
+# "CUDA only", which was never true — see docs/ROCM_TEXTURING_PLAN.md — so the
+# paint-only packages (RealESRGAN, pymeshlab, pytorch-lightning, pybind11) are
+# part of the normal install now rather than an afterthought.
+# ============================================================
+
+# Core ML
+#
+# The two upper bounds are load-bearing, not caution:
+#   transformers 5.x is a major break and upstream targets 4.46 (it drives the
+#     DINOv2 and CLIP conditioners directly).
+#   huggingface_hub 1.x dropped APIs that diffusers 0.30 and hy3dshape still
+#     call (HfFolder, cached_download).
+diffusers>=0.30.0,<0.36
+transformers>=4.45.0,<5
+accelerate>=1.0.0
+safetensors>=0.4.5
+huggingface_hub>=0.25.0,<1.0
+sentencepiece>=0.2.0
+einops>=0.8.0
+omegaconf>=2.3.0
+pytorch-lightning>=2.0.0        # hunyuanpaintpbr/unet/model.py subclasses pl.LightningModule
+torchmetrics>=1.0.0
+torchdiffeq>=0.2.4              # hy3dshape transport integrators
+timm>=1.0.0                     # hy3dshape/models/denoisers/moe_layers.py
+
+# Image processing
+Pillow>=10.4.0
+opencv-python>=4.10.0
+imageio>=2.35.0
+scikit-image>=0.24.0
+rembg[cpu]>=2.0.58              # background removal — CPU backend on Apple Silicon
+onnxruntime>=1.19.0             # rembg backend
+
+# Super-resolution for the paint pipeline.
+# basicsr imports torchvision.transforms.functional_tensor, which modern
+# torchvision removed — upstream's hy3dpaint/utils/torchvision_fix.py shims it,
+# and paint.py applies that fix before importing either package.
+realesrgan>=0.3.0
+basicsr>=1.4.2
+
+# 3D stack
+trimesh>=4.4.0
+numpy>=1.26,<2.2                # compatibility with trimesh
+scipy>=1.13.0
+PyMCubes>=0.1.4                 # marching cubes for mesh extraction
+pygltflib>=1.16.0               # GLB/GLTF export, incl. PBR materials
+pymeshlab>=2022.2               # decimation / remeshing
+# trimesh moved quadric decimation behind this optional backend. Without it the
+# paint pipeline's remesh step dies with ModuleNotFoundError halfway through
+# texturing, after the shape stage has already been paid for.
+fast_simplification>=0.1.7
+xatlas>=0.0.9                   # UV unwrap
+
+# Native extension build (mesh_inpaint_processor — pure pybind11, no CUDA).
+# The rasterizer needs no compiler at all on Mac: torch_rasterizer.py runs it
+# on MPS. See scripts/build_extensions.py.
+pybind11>=2.13.0
+ninja>=1.11.0
+
+# Web UI
+#
+# gradio must stay on 5.x: 6.x requires huggingface-hub>=1.16, which is mutually
+# exclusive with the transformers<5 pin above (transformers 4.x requires hub<1.0).
+gradio>=5.0.0,<6
+gradio-client>=1.3.0,<2
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Utilities
+tqdm>=4.66.0
+pyyaml>=6.0.2
+configargparse>=1.7
+psutil>=6.0.0
+python-dotenv>=1.0.1
+loguru>=0.7.2

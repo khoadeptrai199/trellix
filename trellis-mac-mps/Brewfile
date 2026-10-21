@@ -1,0 +1,14 @@
+# Homebrew Bundle file for TRELLIS on Apple Silicon (Mac) system-level prerequisites.
+# Usage:
+#   brew bundle
+#
+# This only covers what conda/pip can't install for you. After this:
+#   conda env create -f environment.yml && conda activate trellis-mac-mps
+# (or the plain-venv path in README.md's "Apple Silicon quick start" using requirements-test.txt)
+#
+# Xcode Command Line Tools are also required (for the Metal compiler used by this port's
+# hand-written Metal kernels) but can't be installed via brew -- run `xcode-select --install`
+# first if `xcode-select -p` doesn't already print a path.
+
+cask "miniconda"   # bootstraps `conda`, used by environment.yml below
+brew "git"         # `git clone --recurse-submodules` + fetching the flexicubes submodule

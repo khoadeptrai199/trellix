@@ -1,0 +1,20 @@
+# Dependencies needed to run tests/*.py on Apple Silicon (MPS). Pinned to the exact versions
+# verified working on this port's development machine (M5 Max, macOS 26.4.1) -- see
+# APPLE_SILICON.md's "Quick start" section for the full narrative and why each package is needed
+# (in particular: use this exact utils3d fork/commit, not the generic PyPI "utils3d" package,
+# which pulls in open3d and has no arm64 wheels).
+torch==2.13.0
+numpy==2.4.6
+pillow==12.2.0
+trimesh==4.12.2
+xatlas==0.0.11
+pyvista==0.48.4
+pymeshfix==0.18.1
+python-igraph==1.0.0
+opencv-python==5.0.0.93
+plyfile==1.1.4
+easydict==1.13
+tqdm==4.68.2
+pyobjc-framework-Metal==12.2.1
+pyobjc-framework-Cocoa==12.2.1
+git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8

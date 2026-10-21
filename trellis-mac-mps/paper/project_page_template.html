@@ -1,0 +1,329 @@
+<title>Does Metal Performance Primitives Deliver?</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f2e9;
+    --surface: #fffdf7;
+    --surface-2: #efe9da;
+    --ink: #221c12;
+    --ink-2: #5c5344;
+    --ink-3: #8a806c;
+    --line: #e3dcc8;
+    --accent: #b5551f;
+    --accent-ink: #fffaf2;
+    --accent-2: #2c6a68;
+    --good: #3d7a3d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #14110b;
+      --surface: #1c1810;
+      --surface-2: #241f15;
+      --ink: #f3ede0;
+      --ink-2: #beb29a;
+      --ink-3: #857a65;
+      --line: #332b1d;
+      --accent: #e08a4f;
+      --accent-ink: #191308;
+      --accent-2: #5aa6a3;
+      --good: #6fae6f;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14110b;
+    --surface: #1c1810;
+    --surface-2: #241f15;
+    --ink: #f3ede0;
+    --ink-2: #beb29a;
+    --ink-3: #857a65;
+    --line: #332b1d;
+    --accent: #e08a4f;
+    --accent-ink: #191308;
+    --accent-2: #5aa6a3;
+    --good: #6fae6f;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- header / hero ---------- */
+  header.hero { padding: 64px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+  h1.title {
+    font-size: clamp(28px, 4.4vw, 42px); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em;
+    margin: 0 0 18px; text-wrap: balance; max-width: 18ch;
+  }
+  .authors { font-size: 15px; color: var(--ink-2); margin: 0 0 4px; }
+  .affils { font-size: 13px; color: var(--ink-3); margin: 0 0 28px; }
+  .cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600;
+    padding: 10px 18px; border-radius: 8px; text-decoration: none; border: 1px solid transparent;
+    transition: transform 0.08s ease, filter 0.12s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn.secondary:hover { border-color: var(--ink-3); }
+
+  /* ---------- teaser image ---------- */
+  .teaser-frame {
+    margin: 32px 0 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+  }
+  .teaser-frame img { display: block; width: 100%; height: auto; }
+
+  /* ---------- metric strip ---------- */
+  .metrics {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    margin: 36px 0;
+  }
+  .metric { background: var(--surface); padding: 20px 16px; text-align: left; }
+  .metric .num { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: -0.01em; }
+  .metric .lbl { font-size: 12px; color: var(--ink-3); margin-top: 4px; line-height: 1.4; }
+
+  /* ---------- sections ---------- */
+  section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  .section-num {
+    font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; color: var(--ink-3);
+    letter-spacing: 0.04em; margin: 0 0 8px;
+  }
+  h2 {
+    font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 14px; text-wrap: balance;
+  }
+  p { font-size: 15.5px; line-height: 1.65; color: var(--ink-2); max-width: 64ch; margin: 0 0 16px; }
+  p code, li code {
+    font-family: ui-monospace, "SF Mono", monospace; font-size: 0.88em; background: var(--surface-2);
+    padding: 1px 6px; border-radius: 5px; color: var(--ink);
+  }
+  strong { color: var(--ink); font-weight: 650; }
+
+  figure { margin: 24px 0; }
+  figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+  figcaption { font-size: 13px; color: var(--ink-3); margin-top: 10px; line-height: 1.5; max-width: 64ch; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .finding {
+    background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 16px 18px; margin: 20px 0; font-size: 14.5px; color: var(--ink-2); line-height: 1.6;
+  }
+  .finding b { color: var(--ink); }
+  .finding.good { border-left-color: var(--good); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 18px 0; }
+  .table-wrap { overflow-x: auto; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-3); font-weight: 650; }
+  td.num, th.num { text-align: right; font-family: ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- gallery ---------- */
+  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0; }
+  @media (max-width: 700px) { .gallery { grid-template-columns: repeat(2, 1fr); } }
+  .gallery-item { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+  .gallery-item video { display: block; width: 100%; aspect-ratio: 1/1; object-fit: cover; background: #000; }
+  .gallery-item .cap { font-size: 12.5px; color: var(--ink-2); padding: 8px 10px; font-weight: 600; }
+
+  /* ---------- citation ---------- */
+  .citebox {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+    font-family: ui-monospace, "SF Mono", monospace; font-size: 12.5px; color: var(--ink-2); line-height: 1.7;
+    white-space: pre-wrap; overflow-x: auto; user-select: all;
+  }
+
+  footer { padding: 40px 0 60px; }
+  footer p { font-size: 13px; color: var(--ink-3); }
+
+  a { color: var(--accent-2); }
+  a:focus-visible, button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Systems &middot; Apple Silicon &middot; Diffusion Transformers</p>
+    <h1 class="title">Does Metal Performance Primitives Deliver?</h1>
+    <p class="authors">Vinayak Pathak &middot; Debabrata Goswami</p>
+    <p class="affils">Center for Lasers and Photonics, IIT Kanpur &nbsp;&middot;&nbsp; Center for Bits and Atoms, MIT</p>
+    <div class="cta-row">
+      <a class="btn primary" href="{{paper_pdf}}" download="pathak_goswami_mpp_trellis.pdf">Download paper (PDF)</a>
+      <a class="btn secondary" href="#results">See results</a>
+      <a class="btn secondary" href="#gallery">3D gallery</a>
+    </div>
+  </header>
+
+  <div class="teaser-frame">
+    <img src="{{teaser}}" alt="Four example input photos alongside their TRELLIS-generated 3D outputs, rendered">
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="num mono">1.17&times;</div><div class="lbl">closest hand-written attention kernel got to native SDPA</div></div>
+    <div class="metric"><div class="num mono">1.98&times;</div><div class="lbl">avg. speedup from reduced sampling steps, 6 objects tested</div></div>
+    <div class="metric"><div class="num mono">1.29&times;</div><div class="lbl">CFG difference-caching speedup, quality-verified</div></div>
+    <div class="metric"><div class="num mono">6 / 46</div><div class="lbl"><code>matmul2d</code> operand combinations empirically swept</div></div>
+  </div>
+
+  <section id="summary">
+    <p class="section-num">00 &mdash; Summary</p>
+    <h2>A falsification-driven empirical study, not a success story told in advance</h2>
+    <p>
+      Apple's M5 generation introduced dedicated per-GPU-core Neural Accelerators, exposed through a new
+      low-level API called Metal Performance Primitives (<code>matmul2d</code>). We asked a narrow, testable
+      question inside a real, deployed workload &mdash; TRELLIS, an image-to-3D diffusion transformer, ported to
+      run natively on Apple Silicon &mdash; <strong>does a hand-written kernel built on this new API actually beat
+      PyTorch's existing native path?</strong> Mostly, no. We report that honestly, with the same rigor we'd want
+      applied to a positive result, and then use what we learned to find a real, working, algorithmic speedup
+      instead.
+    </p>
+  </section>
+
+  <section id="results">
+    <p class="section-num">01 &mdash; Kernel-level characterization</p>
+    <h2>Six operand combinations, three kernel designs, one honest ceiling</h2>
+    <p>
+      Every combination of <code>matmul2d</code> operand types with a <code>half</code> or <code>bfloat</code>
+      operand clustered near <strong>1.9&times; slower</strong> than native <code>float16</code> <code>nn.Linear</code>
+      &mdash; independent of the other operand's type. Only fully-quantized <code>int8&times;int8&rarr;int32</code>
+      reached parity, at a real accuracy cost.
+    </p>
+    <figure>
+      <img src="{{chart_combos}}" alt="Bar chart of matmul2d speed across six operand-type combinations versus native fp16">
+      <figcaption>Every narrow-float combination clusters near 1.9&times; slower than native, regardless of the other operand's type &mdash; ruling out int8 specifically as the bottleneck.</figcaption>
+    </figure>
+    <p>
+      We then built an attention kernel from scratch: a naive per-head dispatch loop, a batched-dispatch fix
+      that falsified our own dispatch-count hypothesis, and finally an online-softmax (flash-attention-style)
+      kernel with a real, found-and-fixed correctness bug and a verified parallelization win.
+    </p>
+    <figure>
+      <img src="{{chart_progression}}" alt="Bar chart showing five successive kernel designs converging toward native SDPA latency">
+      <figcaption>Progression across five kernel designs, real self-attention shape (H=16, L=4096, D=64). Parallelizing the online-softmax bookkeeping closed most of the remaining gap.</figcaption>
+    </figure>
+    <div class="finding">
+      <b>Investigated, not assumed:</b> <code>cooperative_tensor</code> register-resident chaining &mdash; MPP's
+      more sophisticated mechanism for avoiding a device-memory round trip between chained <code>matmul2d</code>
+      calls &mdash; requires single-simdgroup execution scope by a hard <code>static_assert</code> in the actual
+      implementation header. Our kernel's tiling needs <code>execution_simdgroups&lt;4&gt;</code>; a redesign
+      around single-simdgroup execution would very likely mean smaller tiles and more dispatches, which we'd
+      already shown regresses performance in a tile-size experiment. A real architectural constraint, found by
+      reading the source, not a difficulty judgment.
+    </div>
+  </section>
+
+  <section id="cfg-caching">
+    <p class="section-num">02 &mdash; Algorithmic contribution</p>
+    <h2>A real redundancy, a naive fix that failed, and a grounded fix that worked</h2>
+    <p>
+      TRELLIS's guidance-interval sampler calls the denoiser <em>twice</em> per step within its guidance
+      window &mdash; once conditioned, once unconditioned. Caching the unconditional prediction and reusing it
+      for several steps is a known idea in the literature. Doing it naively &mdash; freezing the raw value &mdash;
+      produced real, visually confirmed drift that grew worse with cache interval.
+    </p>
+    <div class="two-col">
+      <figure>
+        <img src="{{chart_cfg}}" alt="Line chart of mesh vertex count vs cache interval for naive and difference-based CFG caching">
+        <figcaption>Naive freezing drifts monotonically away from baseline; caching the prediction <em>difference</em> instead stays stable.</figcaption>
+      </figure>
+      <figure>
+        <img src="{{chart_steps}}" alt="Two charts showing speedup and structural fidelity as sampling steps are reduced">
+        <figcaption>Reduced sampling steps: real speedup, and IoU degrades faster than actual visual quality does.</figcaption>
+      </figure>
+    </div>
+    <p>
+      We root-caused the failure against the actual mechanisms FasterCache and AB-Cache use in the published
+      literature &mdash; neither freezes a raw branch value; both cache <em>differences</em>, and AB-Cache
+      explicitly documents that a larger guidance scale amplifies stale-cache error, directly relevant given
+      TRELLIS's configured strength of 5.0. Our fix: cache <code>d = pred - neg_pred</code>, and on a reuse step
+      derive <code>neg_pred &asymp; pred_fresh - d</code> &mdash; costing no extra model call, since the
+      conditional prediction is already computed fresh every step.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Method</th><th class="num">Interval</th><th class="num">Speedup</th><th class="num">Mesh vertices</th><th class="num">Voxel IoU</th></tr></thead>
+        <tbody>
+          <tr><td>Baseline (no caching)</td><td class="num">1</td><td class="num">1.00&times;</td><td class="num">313,772</td><td class="num">1.0000</td></tr>
+          <tr><td>Naive (freeze raw value)</td><td class="num">4</td><td class="num">1.12&times;</td><td class="num">394,129</td><td class="num">0.6787</td></tr>
+          <tr><td><strong>Difference-caching (ours)</strong></td><td class="num">4</td><td class="num"><strong>1.29&times;</strong></td><td class="num">309,281</td><td class="num">0.7913</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Verified across 3 additional objects &times; 2 seeds each: <strong>1.98&times;</strong> average speedup for step reduction, <strong>1.22&times;</strong> for difference-caching, holding on every combination tested.</p>
+  </section>
+
+  <section id="gallery">
+    <p class="section-num">03 &mdash; 3D gallery</p>
+    <h2>Every representation this port produces</h2>
+    <p>Rendered directly from this Apple Silicon port &mdash; Gaussian splats for four example objects, plus one radiance-field (octree) render using this project's own hand-written Metal rasterizer.</p>
+    <div class="gallery">
+      <div class="gallery-item">
+        <video src="{{video_T}}" autoplay muted loop playsinline></video>
+        <div class="cap">T &mdash; Gaussian splat</div>
+      </div>
+      <div class="gallery-item">
+        <video src="{{video_vase}}" autoplay muted loop playsinline></video>
+        <div class="cap">Vase &mdash; Gaussian splat</div>
+      </div>
+      <div class="gallery-item">
+        <video src="{{video_dragon}}" autoplay muted loop playsinline></video>
+        <div class="cap">Dragon &mdash; Gaussian splat</div>
+      </div>
+      <div class="gallery-item">
+        <video src="{{video_biplane}}" autoplay muted loop playsinline></video>
+        <div class="cap">Biplane &mdash; Gaussian splat</div>
+      </div>
+      <div class="gallery-item">
+        <video src="{{video_octree}}" autoplay muted loop playsinline></video>
+        <div class="cap">T &mdash; radiance field (octree, hand-Metal rasterizer)</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="limitations">
+    <p class="section-num">04 &mdash; Limitations</p>
+    <h2>What this isn't</h2>
+    <p>
+      Single machine (one Apple M5 Max), single model, mostly single-run wall-clock timings rather than
+      repeated-trial statistics, and no direct benchmark against MLX or llama.cpp's Metal backend (only MLX's
+      published kernel source as corroborating evidence). Both algorithmic results are verified on a
+      convenience sample of objects with IoU/vertex-count proxies plus visual inspection, not a systematic
+      perceptual study. Full discussion in the paper.
+    </p>
+  </section>
+
+  <section id="cite">
+    <p class="section-num">05 &mdash; Cite this work</p>
+    <h2>Citation</h2>
+    <div class="citebox">@misc{pathak2026mpp,
+  title  = {Does Metal Performance Primitives Deliver? An Empirical
+            Characterization of matmul2d and Difference-Based Guidance
+            Caching for Diffusion Transformer Inference on Apple Silicon},
+  author = {Pathak, Vinayak and Goswami, Debabrata},
+  year   = {2026},
+  note   = {Center for Lasers and Photonics, IIT Kanpur;
+            Center for Bits and Atoms, MIT}
+}</div>
+  </section>
+
+  <footer>
+    <p>Built on TRELLIS (Xiang et al., Microsoft Research). Kernel work uses Apple's Metal Performance Primitives and Metal Performance Shaders Graph.</p>
+  </footer>
+</div>

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trellis-mac-mps — TRELLIS on Apple Silicon</title>
+<meta name="description" content="An unofficial port of Microsoft's TRELLIS image-to-3D model to run natively on Apple Silicon. No CUDA. Real benchmarks: up to 43x faster after finding and fixing the actual bottleneck.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --graphite-950: #14120f;
+    --graphite-900: #1c1916;
+    --graphite-850: #211d19;
+    --graphite-700: #3a352e;
+    --graphite-600: #4d473d;
+    --bone: #ece6da;
+    --bone-dim: #a89e8c;
+    --copper: #c17a4a;
+    --copper-dim: #8f5c37;
+    --cyan: #5fd4d0;
+    --cyan-dim: #3f9a97;
+    --font-display: "Space Grotesk", sans-serif;
+    --font-body: "Inter", -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--graphite-950);
+    color: var(--bone);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--cyan); }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(20, 18, 15, 0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--graphite-700);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 16px; padding-bottom: 16px; }
+  .brand { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
+  .brand span { color: var(--copper); }
+  nav .links { display: flex; gap: 24px; font-size: 0.88rem; }
+  nav .links a { color: var(--bone-dim); text-decoration: none; }
+  nav .links a:hover { color: var(--bone); }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    position: relative;
+    padding: 96px 0 84px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--graphite-700);
+  }
+
+  #tilegrid {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(28, 1fr);
+    grid-auto-rows: 1fr;
+    opacity: 0.5;
+    mask-image: radial-gradient(ellipse 70% 60% at 70% 40%, black 10%, transparent 75%);
+  }
+  #tilegrid .t {
+    border: 1px solid var(--graphite-850);
+  }
+  #tilegrid .t.lit {
+    background: var(--copper);
+    opacity: 0.16;
+    animation: tileflash 4.5s ease-in-out infinite;
+  }
+  #tilegrid .t.lit.cyanlit { background: var(--cyan); }
+  @keyframes tileflash {
+    0%, 100% { opacity: 0.06; }
+    50% { opacity: 0.32; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #tilegrid .t.lit { animation: none; opacity: 0.14; }
+  }
+
+  .hero-inner { position: relative; z-index: 1; }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--copper);
+    letter-spacing: 0.02em;
+    margin-bottom: 18px;
+  }
+
+  h1.headline {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2.4rem, 5.4vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    margin: 0 0 22px;
+    max-width: 780px;
+  }
+  h1.headline .accent { color: var(--cyan); }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--bone-dim);
+    max-width: 620px;
+    margin: 0 0 40px;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 44px;
+    flex-wrap: wrap;
+  }
+  .stat .num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 2.6rem;
+    color: var(--cyan);
+    line-height: 1;
+  }
+  .stat .num small { font-size: 1.3rem; color: var(--bone-dim); font-weight: 500; }
+  .stat .label {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--bone-dim);
+    margin-top: 8px;
+    max-width: 15ch;
+  }
+
+  .cta-row { display: flex; gap: 14px; margin-top: 44px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    padding: 12px 20px;
+    border-radius: 3px;
+    text-decoration: none;
+    border: 1px solid var(--graphite-600);
+  }
+  .btn-primary { background: var(--cyan); color: var(--graphite-950); border-color: var(--cyan); font-weight: 600; }
+  .btn-primary:hover { background: #79e0dc; }
+  .btn-secondary { color: var(--bone); }
+  .btn-secondary:hover { border-color: var(--bone-dim); }
+
+  /* ---------- sections ---------- */
+  section { padding: 76px 0; border-bottom: 1px solid var(--graphite-700); }
+  section:last-of-type { border-bottom: none; }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--copper);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin: 0 0 32px;
+    max-width: 640px;
+  }
+
+  /* benchmark bars */
+  .bench {
+    margin-bottom: 40px;
+  }
+  .bench-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .bench-meta {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--bone-dim);
+    margin-bottom: 14px;
+  }
+  .bar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .bar-tag {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    width: 64px;
+    flex-shrink: 0;
+    color: var(--bone-dim);
+    text-align: right;
+  }
+  .bar-track { flex: 1; background: var(--graphite-900); border-radius: 2px; overflow: hidden; height: 28px; position: relative; }
+  .bar-fill {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--graphite-950);
+    font-weight: 600;
+    white-space: nowrap;
+    border-radius: 2px;
+  }
+  .bar-fill.before { background: var(--copper); }
+  .bar-fill.after { background: var(--cyan); }
+  .speedup-tag {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--cyan);
+    font-size: 0.85rem;
+    width: 56px;
+    text-align: left;
+  }
+
+  /* what changed grid */
+  .changed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 28px;
+  }
+  .changed-item h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    margin: 0 0 8px;
+    color: var(--bone);
+  }
+  .changed-item p { color: var(--bone-dim); font-size: 0.92rem; margin: 0; }
+
+  /* code block */
+  pre.code {
+    background: var(--graphite-900);
+    border: 1px solid var(--graphite-700);
+    border-radius: 6px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    color: var(--bone);
+    line-height: 1.7;
+  }
+  pre.code .comment { color: var(--bone-dim); }
+  pre.code .cyan { color: var(--cyan); }
+
+  /* footer */
+  footer { padding: 40px 0 60px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; font-size: 0.82rem; color: var(--bone-dim); }
+  footer a { color: var(--bone-dim); }
+  footer a:hover { color: var(--cyan); }
+
+  @media (max-width: 640px) {
+    header.hero { padding: 64px 0 56px; }
+    .hero-stats { gap: 28px; }
+    .stat .num { font-size: 2rem; }
+    nav .links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">trellis<span>-mps</span></div>
+    <div class="links">
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="#changed">What changed</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div id="tilegrid" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <div class="eyebrow">unofficial Apple Silicon port — no CUDA</div>
+    <h1 class="headline">TRELLIS's image&rarr;3D pipeline, running <span class="accent">natively on your Mac's GPU.</span></h1>
+    <p class="hero-sub">A from-scratch port of Microsoft's TRELLIS to PyTorch's MPS backend and hand-written Metal kernels. Every CUDA-only stage replaced. Then benchmarked, found slow, and fixed for real — not just made to run.</p>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="num">2.5<small>x</small></div>
+        <div class="label">faster, full pipeline, end to end (15.0min &rarr; 6.1min)</div>
+      </div>
+      <div class="stat">
+        <div class="num">14<small>&ndash;43x</small></div>
+        <div class="label">faster on the stages the fix targets</div>
+      </div>
+      <div class="stat">
+        <div class="num">0<small>%</small></div>
+        <div class="label">quality lost &mdash; the rasterizer fix is bit-exact</div>
+      </div>
+    </div>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">Get started</a>
+      <a class="btn btn-secondary" href="../WHITEPAPER.md">Read the technical writeup</a>
+    </div>
+  </div>
+</header>
+
+<section id="benchmarks">
+  <div class="wrap">
+    <div class="section-label">Measured, not projected</div>
+    <h2>Real pipeline runs, before and after. Same Mac, same image, same seed.</h2>
+
+    <div class="bench">
+      <div class="bench-title">Full pipeline, end to end</div>
+      <div class="bench-meta">image &rarr; textured .glb + .ply &middot; same object, same seed, same settings</div>
+      <div class="bar-row">
+        <div class="bar-tag">before</div>
+        <div class="bar-track"><div class="bar-fill before" style="width: 100%;">901.2s &middot; 15.0min</div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-tag">after</div>
+        <div class="bar-track"><div class="bar-fill after" style="width: 40.5%;">365.4s &middot; 6.1min</div></div>
+        <div class="speedup-tag">2.47x</div>
+      </div>
+    </div>
+
+    <div class="bench">
+      <div class="bench-title">Hole-filling visibility pass</div>
+      <div class="bench-meta">1000 views &middot; 1024&times;1024 &middot; ~35K-face mesh</div>
+      <div class="bar-row">
+        <div class="bar-tag">before</div>
+        <div class="bar-track"><div class="bar-fill before" style="width: 100%;">~310s &middot; 3.2 it/s</div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-tag">after</div>
+        <div class="bar-track"><div class="bar-fill after" style="width: 6.8%;">21.0s</div></div>
+        <div class="speedup-tag">14.8x</div>
+      </div>
+    </div>
+
+    <div class="bench">
+      <div class="bench-title">Mesh preview render</div>
+      <div class="bench-meta">30 frames &middot; raw 692K-face decoded mesh</div>
+      <div class="bar-row">
+        <div class="bar-tag">before</div>
+        <div class="bar-track"><div class="bar-fill before" style="width: 100%;">181.5s</div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-tag">after</div>
+        <div class="bar-track"><div class="bar-fill after" style="width: 2.3%;">4.2s</div></div>
+        <div class="speedup-tag">43.2x</div>
+      </div>
+    </div>
+
+    <p style="color: var(--bone-dim); font-size: 0.9rem; max-width: 640px;">
+      The fix: binning triangles into screen-space tiles before rasterizing &mdash; the same technique nvdiffrast's own CUDA rasterizer uses (Laine &amp; Karras, 2011) &mdash; instead of testing every pixel against every triangle. Output is bit-identical to the kernel it replaced. Full methodology, including a fix attempt that measured faster in isolation but did <em>nothing</em> for the real workload: <a href="../WHITEPAPER.md">the whitepaper</a>.
+    </p>
+  </div>
+</section>
+
+<section id="changed">
+  <div class="wrap">
+    <div class="section-label">Under the hood</div>
+    <h2>What actually changed</h2>
+    <div class="changed-grid">
+      <div class="changed-item">
+        <h3>No CUDA, anywhere</h3>
+        <p>Sparse 3D convolution, attention, mesh rasterization, and Gaussian splat rasterization all replaced with MPS-native or pure-PyTorch equivalents.</p>
+      </div>
+      <div class="changed-item">
+        <h3>A real Metal kernel, tile-binned</h3>
+        <p>Hand-written, compiled at runtime &mdash; no Xcode required. Bins triangles into tiles instead of brute-forcing every pixel against every triangle.</p>
+      </div>
+      <div class="changed-item">
+        <h3>A silent decimation bug, fixed</h3>
+        <p>One mesh-simplification path was silently reducing meshes by 0% instead of 95% on certain non-manifold geometry. Found, diagnosed, fixed with an automatic fallback.</p>
+      </div>
+      <div class="changed-item">
+        <h3>A local web UI and CLI</h3>
+        <p>Upload an image, watch real progress, view the result in-browser &mdash; or drive it from the terminal. The original ships a Gradio demo only.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="section-label">Get started</div>
+    <h2>Two commands to a 3D asset</h2>
+    <pre class="code"><span class="comment"># generate from an example image</span>
+python3 cli.py generate assets/example_image/typical_creature_dragon.png dragon
+<span class="comment"># -&gt; outputs/dragon.glb, outputs/dragon.ply</span>
+
+<span class="comment"># or launch the local web UI</span>
+python3 cli.py serve
+<span class="comment"># -&gt; </span><span class="cyan">http://127.0.0.1:5050</span></pre>
+    <p style="color: var(--bone-dim); font-size: 0.9rem;">Full setup (dependencies, no CUDA toolkit needed): <a href="../../APPLE_SILICON.md">APPLE_SILICON.md</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Unofficial port. Model and weights by Microsoft's <a href="https://github.com/microsoft/TRELLIS" target="_blank" rel="noopener">TRELLIS</a> (MIT licensed). Port and benchmarks above are independent work.</div>
+    <div><a href="https://github.com/" target="_blank" rel="noopener">GitHub</a> &middot; <a href="../WHITEPAPER.md">Whitepaper</a></div>
+  </div>
+</footer>
+
+<script>
+  const grid = document.getElementById('tilegrid');
+  const N = 28 * 10;
+  const litCount = Math.round(N * 0.05);
+  const cells = [];
+  for (let i = 0; i < N; i++) {
+    const d = document.createElement('div');
+    d.className = 't';
+    grid.appendChild(d);
+    cells.push(d);
+  }
+  const shuffled = cells.slice().sort(() => Math.random() - 0.5);
+  for (let i = 0; i < litCount; i++) {
+    shuffled[i].classList.add('lit');
+    if (i % 3 === 0) shuffled[i].classList.add('cyanlit');
+    shuffled[i].style.animationDelay = `${(Math.random() * 4).toFixed(2)}s`;
+  }
+</script>
+
+</body>
+</html>

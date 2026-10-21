@@ -1,0 +1,64 @@
+name: Tests (macOS)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    # GitHub-hosted macOS runners (macos-14+) are Apple Silicon (arm64/M-series) hardware, needed
+    # since these tests import Metal/PyObjC and PyTorch's MPS backend, neither of which exist on
+    # Intel or Linux runners. IMPORTANT, confirmed by an actual failed run: torch.backends.mps.
+    # is_available() reports True here, but real MPS tensor allocation fails immediately
+    # ("MPS backend out of memory", 0 bytes allocated) -- these runners' Metal GPU access isn't
+    # actually usable for PyTorch's MPS backend in whatever virtualization layer GitHub runs them
+    # in, even though the API claims otherwise. .ci/sitecustomize.py (loaded via PYTHONPATH below,
+    # only when CI_FORCE_CPU=1) forces every test's existing
+    # `device = 'mps' if torch.backends.mps.is_available() else 'cpu'` fallback onto CPU instead,
+    # so this workflow verifies real correctness on whatever compute actually works here -- it is
+    # NOT exercising MPS-accelerated code paths, despite running on Apple Silicon hardware.
+    # Interesting exception: the raw PyObjC/Metal kernel tests (metal_smoke_test.py,
+    # metal_rasterizer_verify.py, metal_gaussian_verify.py) call the Metal framework directly, not
+    # through torch.backends.mps, and continue to exercise real Metal compute here regardless of
+    # this override.
+    runs-on: macos-14
+    env:
+      SPARSE_BACKEND: pytorch
+      ATTN_BACKEND: sdpa
+      CI_FORCE_CPU: "1"
+      PYTHONPATH: ${{ github.workspace }}/.ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+
+      - name: Report MPS/Metal status on this runner (informational only, not a gate)
+        run: |
+          python3 -c "import torch; print('torch.backends.mps.is_available():', torch.backends.mps.is_available())"
+          python3 -c "import Metal; d = Metal.MTLCreateSystemDefaultDevice(); print('Metal device:', d.name() if d else None)"
+
+      - name: Run test suite
+        run: |
+          set -e
+          fail=0
+          for f in tests/*.py; do
+            echo "::group::$f"
+            if python3 "$f"; then
+              echo "PASS: $f"
+            else
+              echo "FAIL: $f"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
