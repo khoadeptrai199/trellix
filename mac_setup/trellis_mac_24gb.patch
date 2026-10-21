@@ -1,0 +1,201 @@
+diff --git a/.gitignore b/.gitignore
+index ab34938..384f440 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -408,3 +408,7 @@ FodyWeavers.xsd
+ 
+ # macOS
+ .DS_Store
++
++# Local Mac setup
++.venv/
++*.before-mac-setup
+diff --git a/cli.py b/cli.py
+index 066f6b5..7331ae6 100644
+--- a/cli.py
++++ b/cli.py
+@@ -39,6 +39,8 @@ def cmd_generate(args):
+         cmd += ["--multiview-nviews", str(args.multiview_nviews)]
+     if args.skip_previews:
+         cmd.append("--skip-previews")
++    if args.mesh_only:
++        cmd.append("--mesh-only")
+     if args.include_radiance_field:
+         cmd.append("--include-radiance-field")
+     if args.device:
+@@ -95,6 +97,8 @@ def main():
+     p_gen.add_argument("--fill-holes-num-views", type=int, dest="fill_holes_num_views")
+     p_gen.add_argument("--multiview-nviews", type=int, dest="multiview_nviews")
+     p_gen.add_argument("--skip-previews", action="store_true", help="Skip preview .mp4 renders (faster).")
++    p_gen.add_argument("--mesh-only", action="store_true",
++                       help="Export an untextured mesh GLB for printing; skips Gaussian, previews, and texture baking.")
+     p_gen.add_argument("--include-radiance-field", action="store_true",
+                         help="Also render the radiance_field (octree) preview. Opt-in: correct but "
+                              "~18s/frame, 3-15x slower than mesh/gaussian previews -- see APPLE_SILICON.md.")
+diff --git a/scripts/run_real_pipeline.py b/scripts/run_real_pipeline.py
+index 785e746..14ed7d1 100644
+--- a/scripts/run_real_pipeline.py
++++ b/scripts/run_real_pipeline.py
+@@ -4,8 +4,10 @@ import os, sys, time
+ os.environ['SPARSE_BACKEND'] = 'pytorch'
+ os.environ['ATTN_BACKEND'] = 'sdpa'
+ 
+-sys.path.insert(0, '/Users/vinayak/Downloads/TRELLIS-main')
+-os.chdir('/Users/vinayak/Downloads/TRELLIS-main')
++from pathlib import Path
++REPO_ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(REPO_ROOT))
++os.chdir(REPO_ROOT)
+ 
+ import numpy as np
+ import torch
+@@ -19,7 +21,7 @@ from trellis.utils.random_utils import sphere_hammersley_sequence
+ parser = argparse.ArgumentParser(description="Run the full TRELLIS image-to-3D pipeline on Apple Silicon (MPS).")
+ parser.add_argument("image", nargs="?", default="assets/example_image/T.png", help="Path to the input image.")
+ parser.add_argument("out_prefix", nargs="?", default="sample", help="Output filename prefix (files land in --out-dir).")
+-parser.add_argument("--out-dir", default="/Users/vinayak/Downloads/TRELLIS-main/outputs", help="Output directory.")
++parser.add_argument("--out-dir", default=str(REPO_ROOT / "outputs"), help="Output directory.")
+ parser.add_argument("--seed", type=int, default=1, help="Sampling seed.")
+ parser.add_argument("--simplify", type=float, default=0.95, help="Mesh decimation ratio (fraction of faces removed).")
+ parser.add_argument("--texture-size", type=int, default=1024, help="Baked texture resolution.")
+@@ -30,6 +32,8 @@ parser.add_argument("--multiview-nviews", type=int, default=100, help="Number of
+ parser.add_argument("--preview-resolution", type=int, default=256, help="Resolution of the gaussian/mesh preview .mp4 videos.")
+ parser.add_argument("--preview-frames", type=int, default=30, help="Frame count of the preview .mp4 videos.")
+ parser.add_argument("--skip-previews", action="store_true", help="Skip the gaussian/mesh preview .mp4 renders (saves time).")
++parser.add_argument("--mesh-only", action="store_true",
++                    help="Export an untextured mesh GLB and skip Gaussian and texture baking.")
+ parser.add_argument("--include-radiance-field", action="store_true",
+                      help="Also decode+render the radiance_field (octree/trivec) format. Opt-in: "
+                           "correct (trellis/renderers/octree_renderer_mps.py) but ~18s/frame, "
+@@ -53,7 +57,9 @@ out_prefix = args.out_prefix
+ image = Image.open(image_path)
+ print(f"Loaded image: {image_path} {image.size} {image.mode}", flush=True)
+ 
+-formats = ['mesh', 'gaussian'] + (['radiance_field'] if args.include_radiance_field else [])
++if args.mesh_only and args.include_radiance_field:
++    parser.error("--mesh-only cannot be combined with --include-radiance-field")
++formats = ['mesh'] if args.mesh_only else ['mesh', 'gaussian'] + (['radiance_field'] if args.include_radiance_field else [])
+ t1 = time.time()
+ outputs = pipeline.run(
+     image,
+@@ -63,14 +69,16 @@ outputs = pipeline.run(
+ print(f"\nPipeline.run() completed in {time.time()-t1:.1f}s", flush=True)
+ 
+ mesh = outputs['mesh'][0]
+-gaussian = outputs['gaussian'][0]
+ print(f"mesh: {mesh.vertices.shape[0]} vertices, {mesh.faces.shape[0]} faces, success={mesh.success}")
+-print(f"gaussian: {gaussian.get_xyz.shape[0]} splats")
+-print(f"mesh device: {mesh.vertices.device}, gaussian device: {gaussian.get_xyz.device}")
++print(f"mesh device: {mesh.vertices.device}")
+ print(f"mesh vertices finite: {torch.isfinite(mesh.vertices).all().item()}")
+ print(f"mesh vertices range: [{mesh.vertices.min().item():.3f}, {mesh.vertices.max().item():.3f}]")
+-print(f"gaussian xyz finite: {torch.isfinite(gaussian.get_xyz).all().item()}")
+-print(f"gaussian xyz range: [{gaussian.get_xyz.min().item():.3f}, {gaussian.get_xyz.max().item():.3f}]")
++if not args.mesh_only:
++    gaussian = outputs['gaussian'][0]
++    print(f"gaussian: {gaussian.get_xyz.shape[0]} splats")
++    print(f"gaussian device: {gaussian.get_xyz.device}")
++    print(f"gaussian xyz finite: {torch.isfinite(gaussian.get_xyz).all().item()}")
++    print(f"gaussian xyz range: [{gaussian.get_xyz.min().item():.3f}, {gaussian.get_xyz.max().item():.3f}]")
+ if args.include_radiance_field:
+     radiance_field = outputs['radiance_field'][0]
+     print(f"radiance_field: {radiance_field.position.shape[0]} occupied leaves / {radiance_field.resolution}^3 grid")
+@@ -78,6 +86,29 @@ if args.include_radiance_field:
+ out_dir = args.out_dir
+ os.makedirs(out_dir, exist_ok=True)
+ 
++if args.mesh_only:
++    import trimesh
++    vertices = mesh.vertices.cpu().numpy()
++    faces = mesh.faces.cpu().numpy()
++    finite_faces = np.isfinite(vertices[faces]).all(axis=(1, 2))
++    removed = len(faces) - int(finite_faces.sum())
++    if removed:
++        print(f"Discarding {removed}/{len(faces)} faces with non-finite vertices", flush=True)
++    if finite_faces.mean() < 0.95:
++        raise RuntimeError("More than 5% of mesh faces have non-finite vertices; refusing to export")
++    faces = faces[finite_faces]
++    used_vertices, inverse = np.unique(faces, return_inverse=True)
++    vertices = vertices[used_vertices]
++    faces = inverse.reshape(-1, 3)
++    if not np.isfinite(vertices).all():
++        raise RuntimeError("Mesh still contains non-finite vertices")
++    vertices_rot = vertices @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
++    result = trimesh.Trimesh(vertices=vertices_rot, faces=faces, process=False)
++    output_path = os.path.join(out_dir, f"{out_prefix}.glb")
++    result.export(output_path)
++    print(f"Untextured GLB saved: {output_path}; faces={len(result.faces)}; watertight={result.is_watertight}", flush=True)
++    sys.exit(0)
++
+ if args.include_radiance_field:
+     print("\nRendering radiance-field (octree) preview -- this is the slowest preview stage, "
+           "~18s/frame, see APPLE_SILICON.md...", flush=True)
+diff --git a/webapp/app.py b/webapp/app.py
+index 3dbe561..9123bfb 100644
+--- a/webapp/app.py
++++ b/webapp/app.py
+@@ -79,6 +79,8 @@ def api_generate():
+             options[key] = val
+     if request.form.get('skip_previews') in ('1', 'true', 'on'):
+         options['skip_previews'] = True
++    if request.form.get('mesh_only') in ('1', 'true', 'on'):
++        options['mesh_only'] = True
+     if request.form.get('include_radiance_field') in ('1', 'true', 'on'):
+         options['include_radiance_field'] = True
+ 
+diff --git a/webapp/jobs.py b/webapp/jobs.py
+index f5bb3b6..e43d894 100644
+--- a/webapp/jobs.py
++++ b/webapp/jobs.py
+@@ -57,6 +57,7 @@ _STAGE_MARKERS = [
+     ("optimizing", "Optimizing baked texture"),
+     ("glb exported", "Exporting .glb"),
+     ("ply saved", "Saving .ply"),
++    ("Untextured GLB saved", "Done"),
+     ("TOTAL TIME", "Finalizing"),
+     ("=== DONE ===", "Done"),
+ ]
+@@ -105,6 +106,8 @@ def start_job(image_path, out_prefix, options=None):
+             cmd += [flag, str(val)]
+     if options.get('skip_previews'):
+         cmd.append('--skip-previews')
++    if options.get('mesh_only'):
++        cmd.append('--mesh-only')
+     if options.get('include_radiance_field'):
+         cmd.append('--include-radiance-field')
+ 
+diff --git a/webapp/static/js/app.js b/webapp/static/js/app.js
+index 6e75876..5f25a71 100644
+--- a/webapp/static/js/app.js
++++ b/webapp/static/js/app.js
+@@ -119,7 +119,8 @@ function gatherOptions() {
+     multiview_nviews: $("opt-mv-views").value,
+   };
+   if ($("opt-skip-previews").checked) opts.skip_previews = "1";
+-  if ($("opt-radiance-field").checked) opts.include_radiance_field = "1";
++  if ($("opt-mesh-only").checked) opts.mesh_only = "1";
++  if (!$('opt-mesh-only').checked && $("opt-radiance-field").checked) opts.include_radiance_field = "1";
+   return opts;
+ }
+ 
+diff --git a/webapp/templates/index.html b/webapp/templates/index.html
+index 57a9702..d086d00 100644
+--- a/webapp/templates/index.html
++++ b/webapp/templates/index.html
+@@ -9,7 +9,7 @@
+ <body>
+   <header>
+     <h1>TRELLIS <span class="badge">Apple Silicon port</span></h1>
+-    <p class="tagline">Image &rarr; 3D asset (mesh + Gaussian splat), generated locally on your Mac's GPU via Metal. No CUDA.</p>
++    <p class="tagline">Image &rarr; 3D asset, generated locally on your Mac's GPU via Metal. No CUDA.</p>
+     <details class="whats-new">
+       <summary>What's new in this port</summary>
+       <ul>
+@@ -42,6 +42,7 @@
+       <details class="settings">
+         <summary>Advanced settings</summary>
+         <div class="settings-grid">
++          <label class="checkbox-label"><input type="checkbox" id="opt-mesh-only" checked> Mesh only (recommended for 24 GB Macs; untextured GLB for STL conversion)</label>
+           <label>Seed <input type="number" id="opt-seed" value="1"></label>
+           <label>Mesh simplify ratio <input type="number" id="opt-simplify" value="0.95" step="0.01" min="0" max="0.99"></label>
+           <label>Texture size <input type="number" id="opt-texture-size" value="1024" step="256"></label>
